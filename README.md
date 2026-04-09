@@ -1,5 +1,4 @@
 # Image Look-Alike Finder
-**Linear Algebra Implementation for Image Similarity Search**
 
 Course: UE24MA241B – Linear Algebra and Its Applications
 
@@ -41,10 +40,10 @@ Each step maps directly to concepts from your linear algebra course:
 - **Implementation**: Project images onto orthogonal basis for low-dimensional coordinates
 - **Result**: "Visual fingerprints" for each image
 
-### Step 7 — Prediction/Approximation (Similarity)
-- **Topics**: Least Squares Solution, x̂ = (AᵀA)⁻¹Aᵀb
-- **Implementation**: Use least squares to find best linear combination approximation
-- **Result**: Similarity scores based on reconstruction error
+### Step 7 — Similarity Search
+- **Topics**: Cosine Similarity, Vector Projections
+- **Implementation**: Use cosine similarity to find most similar images in projected space
+- **Result**: Similarity scores based on angle between vectors
 
 ### Step 8 — Pattern Discovery
 - **Topics**: Eigenvalues & Eigenvectors
@@ -81,29 +80,21 @@ This launches a Gradio web interface where you can:
 - View top 3 similar matches with similarity scores
 - See the mean face and eigenfaces (discovered patterns)
 
-### Method 3: Run Tests
-```bash
-python test_pipeline.py
-```
-This tests each step of the pipeline to ensure correctness.
 
 ## Project Structure
 
 ```
-├── image_lookalike_finder.py    # Main implementation with all 9 steps
+├── image_lookalike_finder.py   # Main implementation with all 9 steps
 ├── demo.py                     # Interactive Gradio web interface
-├── test_pipeline.py            # Test suite for validation
 ├── requirements.txt            # Python dependencies
 └── README.md                   # This file
 ```
 
 ## Key Features
 
-- **Pure Linear Algebra**: No scikit-learn ML, no PyTorch, no CNNs
-- **Educational**: Each step maps to course concepts for viva preparation
+- **Pure Linear Algebra**: No machine learning libraries for core algorithm
 - **Visual**: See eigenfaces, mean face, and similarity results
 - **Interactive**: Web interface for easy exploration
-- **Tested**: Comprehensive test suite validates each mathematical step
 
 ## Mathematical Concepts Demonstrated
 
@@ -111,7 +102,7 @@ This tests each step of the pipeline to ensure correctness.
 2. **Linear Independence**: QR decomposition for basis selection
 3. **Orthogonality**: Gram-Schmidt process (via QR for stability)
 4. **Projections**: Orthogonal projection onto subspaces
-5. **Least Squares**: x̂ = (AᵀA)⁻¹Aᵀb formulation
+5. **Cosine Similarity**: Angle-based similarity measurement
 6. **Eigen Decomposition**: Pattern discovery and diagonalization
 7. **Dimensionality Reduction**: Principal component analysis
 
@@ -131,22 +122,6 @@ When you run the demo, you'll see:
 - **Top 3 Matches**: Most similar faces with similarity scores
 - **Eigenfaces**: Top 4 principal components (discovered patterns)
 
-## Academic Integrity
-
-This implementation follows the project guidelines strictly:
-- ✅ Uses only NumPy for mathematical operations
-- ✅ No machine learning libraries for core algorithm
-- ✅ Each step explicitly implements linear algebra concepts
-- ✅ SymPy used only for RREF computation
-- ✅ scikit-learn used only for dataset access
-
-## Perfect for Viva Preparation
-
-The code is structured to help you explain each step:
-- Clear function names matching the pipeline steps
-- Detailed comments explaining the mathematics
-- Print statements showing intermediate results
-- Visualizations for intuitive understanding
 
 ## Performance
 
@@ -155,7 +130,3 @@ The code is structured to help you explain each step:
 - **Scalable**: Can handle larger image datasets
 - **Accurate**: Mathematically sound implementation
 
----
-
-**Course**: UE24MA241B – Linear Algebra and Its Applications  
-**Project**: Image Look-Alike Finder using Pure Linear Algebra

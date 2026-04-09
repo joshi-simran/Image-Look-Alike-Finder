@@ -109,7 +109,8 @@ class ImageLookalikeFinder:
         
         # Analyze properties
         rank = np.linalg.matrix_rank(self.covariance_matrix)
-        eigenvals = np.linalg.eigvals(self.covariance_matrix)
+        # Use efficient eigenvalue computation optimized for symmetric matrices
+        eigenvals = np.linalg.eigvalsh(self.covariance_matrix)
         nullity = len(eigenvals) - np.sum(eigenvals > 1e-10)
         
         print(f"Covariance matrix shape: {self.covariance_matrix.shape}")
@@ -146,24 +147,27 @@ class ImageLookalikeFinder:
     
     def step5_gram_schmidt_orthogonalization(self, matrix: np.ndarray) -> np.ndarray:
         """
-        Step 5: Orthogonalization
-        Apply Gram-Schmidt to create orthogonal basis.
+        Step 5: Gram-Schmidt Orthogonalization
+        Apply Gram-Schmidt process (via QR decomposition) to create orthogonal basis.
         
         Topics: Gram-Schmidt, Orthogonal Bases
         """
         print("\nStep 5: Gram-Schmidt orthogonalization...")
         
-        # Use numpy's QR decomposition for numerical stability
-        # This is equivalent to Gram-Schmidt but more stable
-        Q, R = np.linalg.qr(matrix.T)
+        # Apply Gram-Schmidt orthogonalization using QR decomposition
+        # QR decomposition is numerically equivalent to Gram-Schmidt but more stable
+        # Transpose matrix so columns are vectors to orthogonalize
+        Q, R = np.linalg.qr(matrix.T, mode='reduced')
         
-        # Keep only the orthogonal basis vectors
-        self.orthogonal_basis = Q[:, :min(self.n_components, Q.shape[1])]
+        # Q contains orthonormal basis vectors (columns)
+        # Keep only the first n_components basis vectors
+        n_basis_vectors = min(self.n_components, Q.shape[1])
+        self.orthogonal_basis = Q[:, :n_basis_vectors]
         
         print(f"Orthogonal basis shape: {self.orthogonal_basis.shape}")
         print(f"Number of orthogonal directions: {self.orthogonal_basis.shape[1]}")
         
-        # Verify orthogonality
+        # Verify orthogonality: QᵀQ should equal Identity matrix
         dot_product = np.dot(self.orthogonal_basis.T, self.orthogonal_basis)
         is_orthogonal = np.allclose(dot_product, np.eye(dot_product.shape[0]), atol=1e-10)
         print(f"Basis is orthogonal: {is_orthogonal}")
@@ -192,39 +196,59 @@ class ImageLookalikeFinder:
         
         return projected_coordinates
     
-    def step7_least_squares_similarity(self, query_image: np.ndarray, database_projections: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def step7_cosine_similarity(self, query_image: np.ndarray, database_projections: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Step 7: Prediction / Approximation (Similarity)
-        Use least squares to find best matches.
+        Step 7: Similarity Search using Cosine Similarity
+        Use cosine similarity to find best matches in projected space.
         
-        Topics: Least Squares Solution, x̂ = (AᵀA)⁻¹Aᵀb
+        Topics: Cosine Similarity, Vector Projections
         """
-        print("\nStep 7: Computing similarity using least squares...")
+        print("\nStep 7: Computing similarity using cosine similarity...")
         
         # Project query image onto the same basis
         query_projection = np.dot(query_image - self.mean_face, self.orthogonal_basis)
         
-        # Compute reconstruction error for each database image
-        # This is equivalent to finding the least squares solution
-        errors = []
+        # Compute cosine similarity between query and all database images
+        # Cosine similarity = (a · b) / (||a|| * ||b||)
+        similarities = []
         for db_proj in database_projections:
-            # Compute squared Euclidean distance in projected space
-            error = np.sum((query_projection - db_proj) ** 2)
-            errors.append(error)
+            # Compute dot product
+            dot_product = np.dot(query_projection, db_proj)
+            
+            # Compute magnitudes
+            query_norm = np.linalg.norm(query_projection)
+            db_norm = np.linalg.norm(db_proj)
+            
+            # Avoid division by zero
+            if query_norm > 0 and db_norm > 0:
+                similarity = dot_product / (query_norm * db_norm)
+            else:
+                similarity = 0.0
+            
+            similarities.append(similarity)
         
-        errors = np.array(errors)
+        similarities = np.array(similarities)
         
-        # Find top 3 most similar images (smallest errors)
-        top_indices = np.argsort(errors)[:3]
-        top_errors = errors[top_indices]
+        # Find top images, filtering out perfect matches (similarity >= 0.999)
+        # This handles both exact matches and near-perfect matches due to floating point precision
+        valid_indices = np.where(similarities < 0.999)[0]
+        valid_similarities = similarities[valid_indices]
         
-        # Convert errors to similarity scores (higher is better)
-        similarity_scores = 1.0 / (1.0 + top_errors)
+        # Get top 3 most similar images from valid matches
+        if len(valid_indices) >= 3:
+            top_valid_indices = np.argsort(valid_similarities)[::-1][:3]
+            top_indices = valid_indices[top_valid_indices]
+            top_similarities = valid_similarities[top_valid_indices]
+        else:
+            # If fewer than 3 valid matches, take what we have
+            top_valid_indices = np.argsort(valid_similarities)[::-1]
+            top_indices = valid_indices[top_valid_indices]
+            top_similarities = valid_similarities[top_valid_indices]
         
-        print(f"Top 3 matches found with errors: {top_errors}")
-        print(f"Similarity scores: {similarity_scores}")
+        print(f"Top 3 matches found with cosine similarities: {top_similarities}")
+        print(f"Similarity scores range: [{np.min(similarities):.3f}, {np.max(similarities):.3f}]")
         
-        return top_indices, similarity_scores
+        return top_indices, top_similarities
     
     def step8_eigen_analysis(self) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -289,7 +313,7 @@ class ImageLookalikeFinder:
         if top_indices is None or similarity_scores is None:
             return
             
-        fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+        fig, axes = plt.subplots(2, 5, figsize=(20, 8))
         
         # Handle case where we have fewer than 3 matches
         num_matches = min(3, len(top_indices), len(similarity_scores))
@@ -306,23 +330,27 @@ class ImageLookalikeFinder:
         
         # Top 3 matches
         for i in range(num_matches):
-            if i+2 < 4:  # Make sure we don't go beyond column 3
+            if i+2 <= 4:  # Make sure we don't go beyond column 4
                 idx = top_indices[i]
                 score = similarity_scores[i]
                 axes[0, i+2].imshow(self.faces_data[idx], cmap='gray')
                 axes[0, i+2].set_title(f'Match {i+1}: {score:.3f}')
                 axes[0, i+2].axis('off')
         
-        # Top 4 eigenfaces
-        for i in range(4):
+        # Top 4 eigenfaces - centered in 2nd row with equal margins
+        eigenface_positions = [0, 1, 3, 4]  # Positions 0,1,3,4 to center 4 images in 5-column grid
+        for i, pos in enumerate(eigenface_positions):
             eigenface = self.eigenvectors[:, i].reshape(64, 64)
-            axes[1, i].imshow(eigenface, cmap='gray')
-            axes[1, i].set_title(f'Eigenface {i+1}\nλ = {self.eigenvalues[i]:.2f}')
-            axes[1, i].axis('off')
+            axes[1, pos].imshow(eigenface, cmap='gray')
+            axes[1, pos].set_title(f'Eigenface {i+1}\nlambda = {self.eigenvalues[i]:.2f}')
+            axes[1, pos].axis('off')
+        
+        # Leave column 2 (middle column) blank for centering
+        axes[1, 2].axis('off')
         
         plt.tight_layout()
         plt.show()
-    
+
     def run_complete_pipeline(self, query_idx: int = 0):
         """
         Run the complete image similarity pipeline.
@@ -349,9 +377,9 @@ class ImageLookalikeFinder:
         # Step 6: Projection
         database_projections = self.step6_projection_onto_basis(self.centered_matrix)
         
-        # Step 7: Least squares similarity
+        # Step 7: Cosine similarity
         query_image = self.faces_matrix[query_idx]
-        top_indices, similarity_scores = self.step7_least_squares_similarity(query_image, database_projections)
+        top_indices, similarity_scores = self.step7_cosine_similarity(query_image, database_projections)
         
         # top_indices are indices into the full database
         original_top_indices = top_indices.tolist()
@@ -370,7 +398,6 @@ class ImageLookalikeFinder:
         print("=" * 60)
         
         return original_top_indices, similarity_scores
-
 
 def main():
     """
